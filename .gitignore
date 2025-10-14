@@ -1,0 +1,60 @@
+# 编译生成文件
+*.exe
+*.obj
+*.o
+*.out
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+
+# Visual Studio
+.vs/
+Debug/
+Release/
+x64/
+x86/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.aps
+*.pch
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+ipch/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 学习文件（不上传GitHub）
+.AI_PROJECT_RULES.md
+项目规划.md
+docs/Day*_学习指导.md
+学习笔记/
+参考资料/
+
