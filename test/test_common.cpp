@@ -38,6 +38,17 @@ int main() {
     assert(SizeClass::Index(8) == 0);
     assert(SizeClass::Index(16) == 1);
     
+    // Test SpanList
+    cout << "Testing SpanList..." << endl;
+    SpanList spanList;
+    cout << "SpanList empty: " << spanList.Empty() << endl;
+    
+    // Test SystemAlloc
+    cout << "Testing SystemAlloc..." << endl;
+    void* sysPtr = SystemAlloc(1);  // 申请1页
+    cout << "SystemAlloc got ptr: " << (sysPtr != nullptr) << endl;
+    SystemFree(sysPtr);
+    
     cout << "All tests passed" << endl;
     
     // Clean up

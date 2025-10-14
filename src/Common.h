@@ -21,6 +21,35 @@ static const size_t NFREELIST = 208;          // 自由链表数组长度
 static const size_t NPAGES = 129;             // PageCache最多管理128页
 static const size_t PAGE_SHIFT = 13;          // 页大小8KB (2^13)
 
+// 向操作系统申请内存
+inline static void* SystemAlloc(size_t kpage) {
+    void* ptr = nullptr;
+    
+#ifdef _WIN32
+    ptr = VirtualAlloc(0, kpage << PAGE_SHIFT, 
+                       MEM_COMMIT | MEM_RESERVE, 
+                       PAGE_READWRITE);
+#else
+    // Linux版本后面再说
+#endif
+
+    if (ptr == nullptr)
+        throw std::bad_alloc();
+    
+    return ptr;
+}
+
+// 向操作系统释放内存  
+inline static void SystemFree(void* ptr) {
+#ifdef _WIN32
+    VirtualFree(ptr, 0, MEM_RELEASE);
+#else
+    // Linux版本后面再说  
+#endif
+}
+
+
+
 //获取/设置对象的下一个节点
 static void*& NextObj(void* obj)//这个函数可以获取下一个节点，还可以设置下一个节点
 {
@@ -58,7 +87,7 @@ class FreeList {
         size_t _size = 0;           // 当前长度
     };
 
-class SizeClass {//内存对齐
+class SizeClass {//内存对齐+索引计算
     public:
         // 辅助函数：对齐计算（用公式法）
         static inline size_t _RoundUp(size_t bytes, size_t alignNum) {
@@ -122,9 +151,73 @@ class SizeClass {//内存对齐
             return -1;
         }
     };
-// 页号类型
+
+// 页号类型定义
 #ifdef _WIN64
     typedef unsigned long long PAGE_ID;
 #else
     typedef size_t PAGE_ID;
 #endif
+
+struct Span {
+    PAGE_ID _pageId = 0;         // 起始页号
+    size_t _n = 0;               // 页数
+    
+    Span* _next = nullptr;       // 双向链表指针
+    Span* _prev = nullptr;
+    
+    size_t _objSize = 0;         // 切分的对象大小（8字节？16字节？）
+    size_t _useCount = 0;        // 已分配出去的对象数量
+    void* _freeList = nullptr;   // 剩余对象的自由链表
+    
+    bool _isUse = false;         // 是否正在被CentralCache使用
+};
+class SpanList {
+    public:
+        SpanList() {
+            _head = new Span;           // 哨兵节点
+            _head->_next = _head;       // 循环链表
+            _head->_prev = _head;
+        }
+        
+        Span* Begin() { return _head->_next; }
+        Span* End() { return _head; }
+        bool Empty() { return _head->_next == _head; }
+        
+        void PushFront(Span* span) {
+            Insert(Begin(), span);
+        }
+        
+        Span* PopFront() {
+            Span* front = _head->_next;
+            Erase(front);
+            return front;
+        }
+        
+        void Insert(Span* pos, Span* newSpan)
+        {
+            assert(pos);
+            assert(newSpan);
+            Span* prev = pos->_prev;//获取前一个节点，newSpan插在pos前面
+            prev->_next = newSpan;
+            newSpan->_prev = prev;
+            newSpan->_next = pos;
+            pos->_prev = newSpan;//从前往后更新指针
+        }; 
+        void Erase(Span* pos)
+        {
+            //pos就是待删除的节点
+            assert(pos);
+            assert(pos != _head);
+            Span* prev = pos->_prev;//获取前一个节点,用于更新前一个节点的next指针
+            Span* next = pos->_next;//获取后一个节点,用于更新后一个节点的prev指针
+            prev->_next = next;
+            next->_prev = prev;//依旧是从前往后更新指针
+        };                   
+    
+    public:
+        std::mutex _mtx;  // 这个锁后面用
+    
+    private:
+        Span* _head;      // 哨兵头节点
+    };
