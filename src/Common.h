@@ -65,7 +65,7 @@ class FreeList {
             _freeList = obj;//更新链表头
             _size++;
         };    // 插入
-        void* Pop()//头删，不需要参数
+        void* Pop()//头删，不需要参数，但这里不是真的头删，只是把头结点返回，并把头指针后移，并没有真正删除算是取出操作
         {
             assert(_freeList);//确保链表不为空
             void* obj = _freeList;//保存头结点
