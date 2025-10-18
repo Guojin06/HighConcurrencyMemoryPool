@@ -24,9 +24,38 @@ public:
         size_t index = SizeClass::Index(size);
         //2.将对象push到对应的Freelist中
         _freeLists[index].Push(ptr);
+        
+        //3.检查是否需要批量归还给CentralCache
+        if (ListTooLong(index)) {
+            // TODO: 实现批量归还给CentralCache的逻辑
+            // ReleaseToCentralCache(index);
+        }
     };
 
 private:
+    // TODO: 性能调优时根据实测数据调整这些阈值
+    static const size_t SMALL_OBJ_MAX_COUNT = 512;    // 小对象最大缓存数
+    static const size_t MEDIUM_OBJ_MAX_COUNT = 256;   // 中等对象最大缓存数  
+    static const size_t LARGE_OBJ_MAX_COUNT = 64;     // 大对象最大缓存数
+
+    // 检查FreeList是否过长，需要批量归还
+    bool ListTooLong(size_t index)
+    {
+        size_t maxCount = 0;
+        
+        if (index <= 15) {        // 8-128字节，小对象
+            maxCount = SMALL_OBJ_MAX_COUNT;
+        } 
+        else if (index <= 71) {   // 129-1024字节，中等对象  
+            maxCount = MEDIUM_OBJ_MAX_COUNT;
+        }
+        else {                    // 更大的对象
+            maxCount = LARGE_OBJ_MAX_COUNT;
+        }
+        
+        return _freeLists[index].Size() > maxCount;
+    }
+
     // 向CentralCache批量申请内存对象
     void* FetchFromCentralCache(size_t index, size_t size)
     {
