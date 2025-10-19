@@ -1,0 +1,83 @@
+#include "CentralCache.h"
+// #include "PageCache.h"  // TODO: Day4实现PageCache后启用
+
+// 从CentralCache获取一批对象
+size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int num) {
+    size_t index = SizeClass::Index(size);
+    
+    // 加锁保护
+    _mtx.lock();
+    
+    // 1. 先从对应的SpanList中找有空闲对象的Span
+    Span* span = _spanLists[index].Begin();
+    while (span != _spanLists[index].End()) {
+        if (span->_freeList != nullptr) {
+            break;  // 找到有空闲对象的Span
+        }
+        span = span->_next;
+    }
+    
+    // 2. 如果没找到，向PageCache申请新的Span
+    if (span == _spanLists[index].End()) {
+        _mtx.unlock();  // 先解锁，避免死锁
+        
+        // TODO: 向PageCache申请Span（暂时用malloc模拟）
+        span = new Span;
+        span->_pageId = (PAGE_ID)malloc(8 * 1024) >> PAGE_SHIFT;  // 模拟分配1页
+        span->_n = 1;
+        
+        // 切分Span成小块对象
+        size_t blockCount = (8 * 1024) / size;  // 能切多少块
+        void* spanStart = (void*)((span->_pageId) << PAGE_SHIFT);  // Span起始地址
+        
+        // 串成链表：前blockCount-1块
+        for (size_t i = 0; i < blockCount - 1; ++i) {
+            void* cur = (void*)((char*)spanStart + i * size);
+            void* next = (void*)((char*)spanStart + (i + 1) * size);
+            NextObj(cur) = next;
+        }
+        // 最后一块指向nullptr
+        void* last = (void*)((char*)spanStart + (blockCount - 1) * size);
+        NextObj(last) = nullptr;
+        
+        span->_freeList = spanStart;  // 链表头
+        span->_objSize = size;         // 记录对象大小
+        span->_isUse = true;
+        
+        _mtx.lock();  // 重新加锁
+        _spanLists[index].PushFront(span);  // 挂到SpanList
+    }
+    
+    // 3. 从Span的freeList中取出num个对象
+    void* cur = span->_freeList;
+    void* prev = nullptr;
+    size_t actualNum = 0;
+    
+    for (int i = 0; i < num && cur != nullptr; ++i) {
+        prev = cur;
+        cur = NextObj(cur);
+        ++actualNum;
+    }
+    
+    // 更新返回值
+    start = span->_freeList;
+    end = prev;
+    
+    // 更新Span的freeList
+    span->_freeList = cur;
+    span->_useCount += actualNum;
+    
+    _mtx.unlock();
+    
+    return actualNum;
+}
+
+// 将对象链表释放回CentralCache
+void CentralCache::ReleaseListToSpans(void* start, size_t size) {
+    // TODO: Day4实现
+    // 1. 遍历释放的对象链表
+    // 2. 根据地址找到对应的Span
+    // 3. 将对象挂回Span的freeList
+    // 4. 如果Span的所有对象都释放了，考虑还给PageCache
+}
+
