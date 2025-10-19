@@ -46,6 +46,7 @@ size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int nu
         
         _mtx.lock();  // 重新加锁
         _spanLists[index].PushFront(span);  // 挂到SpanList
+        _pageToSpan[span->_pageId] = span;  // 建立页号→Span映射
     }
     
     // 3. 从Span的freeList中取出num个对象
@@ -74,10 +75,35 @@ size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int nu
 
 // 将对象链表释放回CentralCache
 void CentralCache::ReleaseListToSpans(void* start, size_t size) {
-    // TODO: Day4实现
-    // 1. 遍历释放的对象链表
-    // 2. 根据地址找到对应的Span
-    // 3. 将对象挂回Span的freeList
-    // 4. 如果Span的所有对象都释放了，考虑还给PageCache
+    size_t index = SizeClass::Index(size);
+    
+    _mtx.lock();  // 加锁保护
+    
+    // 遍历要释放的对象链表
+    while (start != nullptr) {
+        void* next = NextObj(start);  // 先保存下一个节点
+        
+        // 1. 根据地址计算页号，找到对应的Span
+        PAGE_ID pageId = ((PAGE_ID)start) >> PAGE_SHIFT;
+        Span* span = _pageToSpan[pageId];
+        
+        // 2. 把对象还回Span的freeList（头插法）
+        NextObj(start) = span->_freeList;
+        span->_freeList = start;
+        
+        // 3. 更新使用计数
+        span->_useCount--;
+        
+        // TODO: 如果Span的所有对象都释放了(_useCount==0)，考虑还给PageCache
+        // if (span->_useCount == 0) {
+        //     // 从SpanList中摘除
+        //     // 还给PageCache
+        // }
+        
+        // 4. 移动到下一个对象
+        start = next;
+    }
+    
+    _mtx.unlock();
 }
 
