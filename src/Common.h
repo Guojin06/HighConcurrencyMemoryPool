@@ -150,6 +150,16 @@ class SizeClass {//内存对齐+索引计算
             assert(false);
             return -1;
         }
+        
+        // 计算申请size大小的对象时，应该向PageCache申请几页
+        static inline size_t NumMovePage(size_t size) {
+            // 简单策略：size小于8KB申请1页，否则向上取整
+            size_t num = size / (1 << PAGE_SHIFT);  // 除以8KB
+            if (num == 0) num = 1;  // 至少1页
+            return num;
+            
+            // TODO: 后续优化可以考虑对象数量（让每个Span至少有一定数量的对象）
+        }
     };
 
 // 页号类型定义

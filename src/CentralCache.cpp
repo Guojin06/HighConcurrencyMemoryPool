@@ -1,5 +1,5 @@
 #include "CentralCache.h"
-// #include "PageCache.h"  // TODO: Day4实现PageCache后启用
+#include "PageCache.h"
 
 // 从CentralCache获取一批对象
 size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int num) {
@@ -21,13 +21,13 @@ size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int nu
     if (span == _spanLists[index].End()) {
         _mtx.unlock();  // 先解锁，避免死锁
         
-        // TODO: 向PageCache申请Span（暂时用malloc模拟）
-        span = new Span;
-        span->_pageId = (PAGE_ID)malloc(8 * 1024) >> PAGE_SHIFT;  // 模拟分配1页
-        span->_n = 1;
+        // 向PageCache申请Span
+        size_t numPages = SizeClass::NumMovePage(size);
+        span = PageCache::GetInstance()->NewSpan(numPages);
         
         // 切分Span成小块对象
-        size_t blockCount = (8 * 1024) / size;  // 能切多少块
+        size_t spanBytes = span->_n << PAGE_SHIFT;  // Span总字节数（页数 * 8KB）
+        size_t blockCount = spanBytes / size;  // 能切多少块
         void* spanStart = (void*)((span->_pageId) << PAGE_SHIFT);  // Span起始地址
         
         // 串成链表：前blockCount-1块

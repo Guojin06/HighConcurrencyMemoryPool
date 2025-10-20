@@ -1,5 +1,6 @@
 #pragma once
 #include "Common.h"
+#include "CentralCache.h"
 
 class ThreadCache
 {
@@ -60,17 +61,23 @@ private:
     void* FetchFromCentralCache(size_t index, size_t size)
     {
         // TODO: 实现慢增长算法，当前固定申请8个
-        // TODO: 调用真正的CentralCache，当前用malloc模拟
         
-        // 前7个直接Push到FreeList缓存起来
+        void* start = nullptr;
+        void* end = nullptr;
+        
+        // 从CentralCache批量获取8个对象
+        CentralCache::GetInstance()->FetchRangeObj(start, end, size, 8);
+        
+        // 把前7个Push到FreeList缓存
+        void* cur = start;
         for (int i = 0; i < 7; ++i) {
-            void* obj = malloc(size);
-            _freeLists[index].Push(obj);
+            void* next = NextObj(cur);
+            _freeLists[index].Push(cur);
+            cur = next;
         }
         
-        // 第8个直接返回给用户使用
-        void* returnObj = malloc(size);
-        return returnObj;
+        // 返回第8个对象给用户
+        return cur;
     }
     FreeList _freeLists[NFREELIST];  // 自由链表数组
 };
