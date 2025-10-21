@@ -81,7 +81,29 @@ class FreeList {
         {
             return _size;
         };           // 长度
+        void PopRange(void*& start, void*& end, size_t n)
+        {
+            assert(n <= _size);
+            assert(n > 0);
+
+            start = _freeList;
+            end = start;
+
+            //1.循环255次，找到第256个
+            for(size_t i = 0; i < n - 1; i++)
+            {
+                end = NextObj(end);//此时end指向第256个对象
+            }
+            //2.保存第257个对象的地址
+            _freeList = NextObj(end);//obj257
+            //3.断开链表，防止返回到CentralCache后野指针问题
+            NextObj(end) = nullptr;
+            // 等价于：
+            // obj256的next指针 = nullptr;
     
+            _size -= n;//更新大小
+
+        }
     private:
         void* _freeList = nullptr;  // 链表头指针
         size_t _size = 0;           // 当前长度

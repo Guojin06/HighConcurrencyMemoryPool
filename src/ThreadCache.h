@@ -29,7 +29,7 @@ public:
         //3.检查是否需要批量归还给CentralCache
         if (ListTooLong(index)) {
             // TODO: 实现批量归还给CentralCache的逻辑
-            // ReleaseToCentralCache(index);
+            ReleaseToCentralCache(index,size);
         }
     };
 
@@ -78,6 +78,19 @@ private:
         
         // 返回最后一个对象给用户
         return cur;
+    }
+    void ReleaseToCentralCache(size_t index, size_t size)
+    {
+        //步骤1.计算归还个数
+        size_t releaseNum = _freeLists[index].Size() >> 1;//一半
+        //步骤2.从FreeList弹出releaseNum个对象
+        void* start = nullptr;
+        void* end = nullptr;
+        _freeLists[index].PopRange(start, end, releaseNum);//调用PopRange函数，从FreeList批量弹出releaseNum个对象
+        //步骤3.计算对象大小
+        //这里选择直接传入size，省去从索引计算size的步骤，我们没有实现从索引计算size的函数，这里直接传入size，也提高了效率
+        //步骤4.调用CentralCache::ReleaseListToSpans()将对象链表返回给CentralCache
+        CentralCache::GetInstance()->ReleaseListToSpans(start, size);
     }
     FreeList _freeLists[NFREELIST];  // 自由链表数组
 };
