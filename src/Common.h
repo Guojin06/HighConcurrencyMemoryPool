@@ -176,7 +176,10 @@ class SizeClass {//内存对齐+索引计算
         // 计算申请size大小的对象时，应该向PageCache申请几页
         static inline size_t NumMovePage(size_t size) {
             // 简单策略：size小于8KB申请1页，否则向上取整
-            size_t num = size / (1 << PAGE_SHIFT);  // 除以8KB
+            // size_t num = size / (1 << PAGE_SHIFT);  // 除以8KB
+            //这个错了，不是向上取整，而是向下取整
+            //正确代码
+            size_t num = (size + (1 << PAGE_SHIFT) - 1) >> PAGE_SHIFT;//向上取整
             if (num == 0) num = 1;  // 至少1页
             return num;
             

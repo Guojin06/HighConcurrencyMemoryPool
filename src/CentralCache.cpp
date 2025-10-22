@@ -46,7 +46,14 @@ size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int nu
         
         _mtx.lock();  // 重新加锁
         _spanLists[index].PushFront(span);  // 挂到SpanList
-        _pageToSpan[span->_pageId] = span;  // 建立页号→Span映射
+        // _pageToSpan[span->_pageId] = span;  // 建立页号→Span映射
+        //这里只映射了首页地址，若Span管理多页，后面页没有建立映射，如果返回对象来自后面页，这会造成ThreadCache无法找到Span，导致内存泄露
+        //正确做法：
+        //建立每一页的映射（用于释放时根据对象地址查找Span）
+        for(PAGE_ID  i = 0 ; i< span->_n;++i)
+        {
+            _pageToSpan[span->_pageId+i] = span;
+        }
     }
     
     // 3. 从Span的freeList中取出num个对象
