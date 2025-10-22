@@ -101,4 +101,70 @@ Span* PageCache::NewSpan(size_t k){
 }
 //实现ReleaseSpanToPageCache函数
 void PageCache::ReleaseSpanToPageCache(Span* span){
+    _pageMtx.lock();
+    
+    // 向前合并：检查前面的页是否空闲
+    while (1) {
+        PAGE_ID prevId = span->_pageId - 1;  // 前一页的页号
+        auto it = _pageToSpan.find(prevId);
+        
+        // 如果前一页不存在，或者正在使用，停止向前合并
+        if (it == _pageToSpan.end() || it->second->_isUse == true) {
+            break;
+        }
+        
+        Span* prevSpan = it->second;
+        
+        // 合并后的页数超过128，停止合并（超过128页不缓存）
+        if (prevSpan->_n + span->_n > 128) {
+            break;
+        }
+        
+        // 执行合并：从链表中移除prevSpan
+        _spanLists[prevSpan->_n - 1].Erase(prevSpan);
+        
+        // 合并到当前span（扩展当前span向前）
+        span->_pageId = prevSpan->_pageId;  // 起始页号变成前一个span的
+        span->_n += prevSpan->_n;           // 页数增加
+        
+        // 删除prevSpan对象
+        delete prevSpan;
+    }
+    
+    // 向后合并：检查后面的页是否空闲
+    while (1) {
+        PAGE_ID nextId = span->_pageId + span->_n;  // 后一页的页号
+        auto it = _pageToSpan.find(nextId);
+        
+        // 如果后一页不存在，或者正在使用，停止向后合并
+        if (it == _pageToSpan.end() || it->second->_isUse == true) {
+            break;
+        }
+        
+        Span* nextSpan = it->second;
+        
+        // 合并后的页数超过128，停止合并
+        if (nextSpan->_n + span->_n > 128) {
+            break;
+        }
+        
+        // 执行合并：从链表中移除nextSpan
+        _spanLists[nextSpan->_n - 1].Erase(nextSpan);
+        
+        // 合并到当前span（扩展当前span向后）
+        span->_n += nextSpan->_n;  // 页数增加（起始页号不变）
+        
+        // 删除nextSpan对象
+        delete nextSpan;
+    }
+    
+    // 建立合并后span的每一页映射
+    for (PAGE_ID i = 0; i < span->_n; ++i) {
+        _pageToSpan[span->_pageId + i] = span;
+    }
+    
+    // 将合并后的span插入到对应的SpanList
+    _spanLists[span->_n - 1].PushFront(span);
+    
+    _pageMtx.unlock();
 }

@@ -101,13 +101,30 @@ void CentralCache::ReleaseListToSpans(void* start, size_t size) {
         // 3. 更新使用计数
         span->_useCount--;
         
-        // TODO: 如果Span的所有对象都释放了(_useCount==0)，考虑还给PageCache
-        // if (span->_useCount == 0) {
-        //     // 从SpanList中摘除
-        //     // 还给PageCache
-        // }
+        // 4. 如果Span的所有对象都释放了，归还给PageCache
+        if (span->_useCount == 0) {
+            // 4.1 从SpanList中摘除
+            _spanLists[index].Erase(span);
+            
+            // 4.2 删除CentralCache的映射（每一页都要删除）
+            for (PAGE_ID i = 0; i < span->_n; ++i) {
+                _pageToSpan.erase(span->_pageId + i);
+            }
+            
+            // 4.3 设置为未使用状态
+            span->_isUse = false;
+            
+            // 4.4 先解锁，避免与PageCache的锁形成死锁
+            _mtx.unlock();
+            
+            // 4.5 归还给PageCache（PageCache会进行页合并）
+            PageCache::GetInstance()->ReleaseSpanToPageCache(span);
+            
+            // 4.6 重新加锁，因为while循环还要继续
+            _mtx.lock();
+        }
         
-        // 4. 移动到下一个对象
+        // 5. 移动到下一个对象
         start = next;
     }
     
