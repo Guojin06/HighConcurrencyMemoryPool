@@ -4,6 +4,7 @@
 #include <thread>
 #include <mutex>
 #include <assert.h>
+#include <algorithm>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -14,6 +15,7 @@
 
 using std::cout;
 using std::endl;
+using std::min;
 
 // 全局常量
 static const size_t MAX_BYTES = 256 * 1024;  // ThreadCache最大管理256KB
@@ -184,6 +186,24 @@ class SizeClass {//内存对齐+索引计算
             return num;
             
             // TODO: 后续优化可以考虑对象数量（让每个Span至少有一定数量的对象）
+        }
+        // 计算ThreadCache一次从CentralCache获取多少个对象
+        // 慢增长策略：小对象多拿，大对象少拿
+        static inline size_t NumMoveSize(size_t size) {
+            // 1. 计算：固定字节数/size (MAX_BYTES = 256KB)
+            size_t num = MAX_BYTES / size;
+            
+            // 2. 限制上限512（避免批量过大，锁竞争严重）
+            if (num > 512) {
+                num = 512;
+            }
+            
+            // 3. 至少返回2（避免返回0或1，批量太小）
+            if (num < 2) {
+                num = 2;
+            }
+            
+            return num;
         }
     };
 

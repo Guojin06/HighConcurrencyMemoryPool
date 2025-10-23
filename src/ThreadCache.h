@@ -60,13 +60,14 @@ private:
     // 向CentralCache批量申请内存对象
     void* FetchFromCentralCache(size_t index, size_t size)
     {
-        // TODO: 实现慢增长算法，当前固定申请8个
+        
         
         void* start = nullptr;
         void* end = nullptr;
         
         // 从CentralCache批量获取对象，获取实际数量
-        size_t actualNum = CentralCache::GetInstance()->FetchRangeObj(start, end, size, 8);
+        size_t batchNum =  SizeClass::NumMoveSize(size);
+        size_t actualNum = CentralCache::GetInstance()->FetchRangeObj(start, end, size, batchNum);
         
         // 把前actualNum-1个Push到FreeList缓存
         void* cur = start;
