@@ -5,6 +5,12 @@
 #include <unordered_map>
 #include <mutex>
 
+//优化点1，对齐到缓存行，避免伪共享
+struct alignas(64) PaddedMutex {
+    std::mutex mtx;
+    char padding[64 - sizeof(std::mutex)];
+};
+
 // 中心缓存 - 单例模式
 // 负责从PageCache获取Span，切分成小对象供ThreadCache使用
 class CentralCache {
@@ -35,7 +41,7 @@ private:
     
     SpanList _spanLists[208];  // 按对象大小映射的Span双向链表数组
     std::unordered_map<PAGE_ID, Span*> _pageToSpan;  // 页号到Span的映射
-    std::mutex _mtx[208];  // 全局锁，保护CentralCache的并发访问,细粒度化改进
+    PaddedMutex _mtx[208];  // 全局锁，保护CentralCache的并发访问,细粒度化改进
 };
 
 #endif

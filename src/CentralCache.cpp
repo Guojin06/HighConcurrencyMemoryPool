@@ -6,7 +6,7 @@ size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int nu
     size_t index = SizeClass::Index(size);
     
     // 加锁保护
-    _mtx[index].lock();
+    _mtx[index].mtx.lock();
     
     // 1. 先从对应的SpanList中找有空闲对象的Span
     Span* span = _spanLists[index].Begin();
@@ -19,7 +19,7 @@ size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int nu
     
     // 2. 如果没找到，向PageCache申请新的Span
     if (span == _spanLists[index].End()) {
-        _mtx[index].unlock();  // 先解锁，避免死锁
+        _mtx[index].mtx.unlock();  // 先解锁，避免死锁
         
         // 向PageCache申请Span
         size_t numPages = SizeClass::NumMovePage(size);
@@ -44,7 +44,7 @@ size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int nu
         span->_objSize = size;         // 记录对象大小
         span->_isUse = true;
         
-        _mtx[index].lock();  // 重新加锁
+        _mtx[index].mtx.lock();  // 重新加锁
         _spanLists[index].PushFront(span);  // 挂到SpanList
         // _pageToSpan[span->_pageId] = span;  // 建立页号→Span映射
         //这里只映射了首页地址，若Span管理多页，后面页没有建立映射，如果返回对象来自后面页，这会造成ThreadCache无法找到Span，导致内存泄露
@@ -75,7 +75,7 @@ size_t CentralCache::FetchRangeObj(void*& start, void*& end, size_t size, int nu
     span->_freeList = cur;
     span->_useCount += actualNum;
     
-    _mtx[index].unlock();
+    _mtx[index].mtx.unlock();
     
     return actualNum;
 }
@@ -85,7 +85,7 @@ void CentralCache::ReleaseListToSpans(void* start, size_t size) {
     size_t index = SizeClass::Index(size);
     
 
-    _mtx[index].lock();  // 加锁保护
+    _mtx[index].mtx.lock();  // 加锁保护
     
     // 遍历要释放的对象链表
     while (start != nullptr) {
@@ -116,19 +116,19 @@ void CentralCache::ReleaseListToSpans(void* start, size_t size) {
             span->_isUse = false;
             
             // 4.4 先解锁，避免与PageCache的锁形成死锁
-            _mtx[index].unlock();
+            _mtx[index].mtx.unlock();
             
             // 4.5 归还给PageCache（PageCache会进行页合并）
             PageCache::GetInstance()->ReleaseSpanToPageCache(span);
             
             // 4.6 重新加锁，因为while循环还要继续
-            _mtx[index].lock();
+            _mtx[index].mtx.lock();
         }
         
         // 5. 移动到下一个对象
         start = next;
     }
     
-    _mtx[index].unlock();
+    _mtx[index].mtx.unlock();
 }
 
