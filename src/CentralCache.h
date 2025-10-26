@@ -35,7 +35,7 @@ private:
     
     SpanList _spanLists[208];  // 按对象大小映射的Span双向链表数组
     std::unordered_map<PAGE_ID, Span*> _pageToSpan;  // 页号到Span的映射
-    std::mutex _mtx;  // 全局锁，保护CentralCache的并发访问
+    std::mutex _mtx[208];  // 全局锁，保护CentralCache的并发访问,细粒度化改进
 };
 
 #endif
