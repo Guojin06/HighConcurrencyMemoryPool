@@ -53,7 +53,7 @@ inline static void SystemFree(void* ptr) {
 
 
 //获取/设置对象的下一个节点
-static void*& NextObj(void* obj)//这个函数可以获取下一个节点，还可以设置下一个节点
+static inline void*& NextObj(void* obj)//这个函数可以获取下一个节点，还可以设置下一个节点
 {
     return *(void**)obj;
 }
