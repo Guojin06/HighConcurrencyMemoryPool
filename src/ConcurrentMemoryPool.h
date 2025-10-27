@@ -69,3 +69,32 @@ static inline void ConcurrentFree(void* ptr, size_t size)
         GetTLSThreadCache()->Deallocate(ptr, size);
     }
 }
+
+// 内存池预热：减少冷启动开销
+// 在程序启动时调用，预先分配常用大小的对象
+// 让ThreadCache/CentralCache提前有缓存
+static inline void WarmUpMemoryPool()
+{
+    // 预热常用大小（对齐到8字节）
+    // 覆盖小对象（8-128字节）和中等对象（256-1KB）
+    size_t sizes[] = {8, 16, 24, 32, 48, 64, 96, 128, 256, 512, 1024};
+    
+    for (size_t size : sizes) {
+        // 每个大小分配并释放一批对象
+        // 数量根据NumMoveSize策略，确保填充ThreadCache
+        size_t count = SizeClass::NumMoveSize(size);
+        
+        void* ptrs[512];  // 足够大的数组
+        if (count > 512) count = 512;
+        
+        // 分配
+        for (size_t i = 0; i < count; i++) {
+            ptrs[i] = ConcurrentAlloc(size);
+        }
+        
+        // 释放（建立缓存）
+        for (size_t i = 0; i < count; i++) {
+            ConcurrentFree(ptrs[i], size);
+        }
+    }
+}

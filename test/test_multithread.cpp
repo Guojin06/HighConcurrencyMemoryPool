@@ -267,11 +267,111 @@ void Test_BatchMode() {
     CompareMultiThreadPerformance_Batch(8, 16, 50000, "8线程批量（16字节 x 5万个）");
 }
 
+// 真实混合场景：不同线程分配不同大小对象
+void ThreadTask_Mixed_Malloc(size_t threadId, size_t rounds) {
+    // 每个线程分配不同大小，避免竞争同一个桶
+    size_t sizes[] = {8, 16, 32, 64, 128, 256, 512, 1024};
+    size_t size = sizes[threadId % 8];
+    
+    vector<void*> ptrs;
+    ptrs.reserve(rounds);
+    
+    // 批量分配
+    for (size_t i = 0; i < rounds; i++) {
+        void* p = malloc(size);
+        if (p) {
+            *(char*)p = threadId;
+            ptrs.push_back(p);
+        }
+    }
+    
+    // 批量释放
+    for (void* p : ptrs) {
+        free(p);
+    }
+}
+
+void ThreadTask_Mixed_MemoryPool(size_t threadId, size_t rounds) {
+    // 每个线程分配不同大小，避免竞争同一个桶
+    size_t sizes[] = {8, 16, 32, 64, 128, 256, 512, 1024};
+    size_t mySize = sizes[threadId % 8];  // 每个线程固定一个大小
+    
+    vector<void*> ptrs;
+    ptrs.reserve(rounds);
+    
+    // 批量分配
+    for (size_t i = 0; i < rounds; i++) {
+        void* p = ConcurrentAlloc(mySize);
+        if (p) {
+            *(char*)p = threadId;
+            ptrs.push_back(p);
+        }
+    }
+    
+    // 批量释放
+    for (void* p : ptrs) {
+        ConcurrentFree(p, mySize);
+    }
+}
+
+void Test_MixedSizeScenario(size_t threadCount, size_t roundsPerThread) {
+    cout << "\n========================================" << endl;
+    cout << "【真实混合场景】" << threadCount << "线程混合大小（每线程" << roundsPerThread << "次）" << endl;
+    cout << "说明：不同线程分配不同大小(8,16,32,64,128,256,512,1024字节)" << endl;
+    cout << "========================================" << endl;
+    
+    // 测试malloc
+    cout << "\n【malloc混合场景】" << endl;
+    auto start1 = std::chrono::high_resolution_clock::now();
+    vector<thread> threads1;
+    for (size_t i = 0; i < threadCount; i++) {
+        threads1.emplace_back(ThreadTask_Mixed_Malloc, i, roundsPerThread);
+    }
+    for (auto& t : threads1) {
+        t.join();
+    }
+    auto end1 = std::chrono::high_resolution_clock::now();
+    long long mallocTime = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+    cout << "malloc耗时: " << mallocTime << " ms" << endl;
+    
+    // 测试内存池
+    cout << "\n【内存池混合场景】" << endl;
+    auto start2 = std::chrono::high_resolution_clock::now();
+    vector<thread> threads2;
+    for (size_t i = 0; i < threadCount; i++) {
+        threads2.emplace_back(ThreadTask_Mixed_MemoryPool, i, roundsPerThread);
+    }
+    for (auto& t : threads2) {
+        t.join();
+    }
+    auto end2 = std::chrono::high_resolution_clock::now();
+    long long mempoolTime = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2).count();
+    cout << "内存池耗时: " << mempoolTime << " ms" << endl;
+    
+    // 性能对比
+    cout << "\n【性能对比】" << endl;
+    if (mempoolTime > 0 && mallocTime > 0) {
+        double speedup = (double)mallocTime / mempoolTime;
+        cout << "性能提升: " << speedup << "x" << endl;
+        
+        if (speedup > 1.0) {
+            cout << " 内存池更快 " << (speedup - 1.0) * 100 << "%！" << endl;
+        } else {
+            cout << "malloc更快 " << (1.0 / speedup - 1.0) * 100 << "%" << endl;
+        }
+    }
+}
+
 int main() {
     SetConsoleOutputCP(65001);  // 中文显示
     
     cout << "========== 高并发内存池多线程性能测试 ==========" << endl;
     cout << "硬件并发数: " << thread::hardware_concurrency() << " 核心" << endl;
+    
+    // 内存池预热：减少冷启动开销
+    cout << "\n预热内存池..." << endl;
+    WarmUpMemoryPool();
+    cout << "预热完成！\n" << endl;
     
     // 注释掉即分即放模式，只保留真实场景批量模式
     // Test_2Threads();
@@ -279,8 +379,16 @@ int main() {
     // Test_8Threads();
     // Test_MixedSize();
     
-    // 【真实场景】批量模式测试
+    // 【真实场景1】批量模式测试（同一大小）
     Test_BatchMode();
+    
+    // 【真实场景2】混合大小测试（不同线程分配不同大小）
+    cout << "\n========================================" << endl;
+    cout << "真实混合场景测试（避免桶锁竞争）" << endl;
+    cout << "========================================" << endl;
+    Test_MixedSizeScenario(2, 5000);   // 2线程5000次
+    Test_MixedSizeScenario(4, 1000);   // 4线程减少到1000次
+    Test_MixedSizeScenario(8, 500);    // 8线程500次
     
     cout << "\n========== 所有测试完成 ==========" << endl;
     return 0;
