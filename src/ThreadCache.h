@@ -34,10 +34,12 @@ public:
     };
 
 private:
-    // TODO: 性能调优时根据实测数据调整这些阈值
-    static const size_t SMALL_OBJ_MAX_COUNT = 512;    // 小对象最大缓存数
-    static const size_t MEDIUM_OBJ_MAX_COUNT = 256;   // 中等对象最大缓存数  
-    static const size_t LARGE_OBJ_MAX_COUNT = 64;     // 大对象最大缓存数
+    // 性能调优：提高缓存阈值，减少触发释放频率
+    // NumMoveSize上限512，阈值设为1536（3倍）
+    // 这样拿3次（512×3=1536）才触发释放，减少锁竞争
+    static const size_t SMALL_OBJ_MAX_COUNT = 1536;   // 小对象最大缓存数（原512）
+    static const size_t MEDIUM_OBJ_MAX_COUNT = 768;   // 中等对象最大缓存数（原256）
+    static const size_t LARGE_OBJ_MAX_COUNT = 192;    // 大对象最大缓存数（原64）
 
     // 检查FreeList是否过长，需要批量归还
     bool ListTooLong(size_t index)

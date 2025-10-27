@@ -23,6 +23,7 @@ static const size_t NFREELIST = 208;          // 自由链表数组长度
 static const size_t NPAGES = 129;             // PageCache最多管理128页
 static const size_t PAGE_SHIFT = 13;          // 页大小8KB (2^13)
 
+static constexpr size_t GROUP_ARRAY[4] = {16, 56, 56, 56};//优化编译器计算，提取全局变量
 // 向操作系统申请内存
 inline static void* SystemAlloc(size_t kpage) {
     void* ptr = nullptr;
@@ -114,7 +115,7 @@ class FreeList {
 class SizeClass {//内存对齐+索引计算
     public:
         // 辅助函数：对齐计算（用公式法）
-        static inline size_t _RoundUp(size_t bytes, size_t alignNum) {
+        static inline constexpr size_t _RoundUp(size_t bytes, size_t alignNum) {
 
             return ((bytes + alignNum - 1) & ~(alignNum - 1));//核心掩码对齐算法
         }
@@ -144,39 +145,40 @@ class SizeClass {//内存对齐+索引计算
         }
         
         // 辅助函数：计算某个范围内的索引
-        static inline size_t _Index(size_t bytes, size_t align_shift) {
+        static inline constexpr size_t _Index(size_t bytes, size_t align_shift) {
             return ((bytes + (1 << align_shift) - 1) >> align_shift) - 1;
         }
         
         // 主函数：计算全局索引
-        static inline size_t Index(size_t bytes) {
-            assert(bytes <= MAX_BYTES);
+        static inline constexpr size_t Index(size_t bytes) {
+            // assert(bytes <= MAX_BYTES);//这一行也要去除，因为constexpr编译期计算，所以不需要再判断
             
-            // 每个范围占用的索引数量
-            static int group_array[4] = {16, 56, 56, 56};
+            // // 每个范围占用的索引数量
+            // static int group_array[4] = {16, 56, 56, 56};
+            //这里局部变量已经优化为全局变量，所以不需要再定义，编译期计算
             
             if (bytes <= 128) {
                 return _Index(bytes, 3);  // 3表示右移3位，相当于除以8
             }
             else if (bytes <= 1024) {
-                return _Index(bytes - 128, 4) + group_array[0];
+                return _Index(bytes - 128, 4) + GROUP_ARRAY[0];
             }
             else if (bytes <= 8 * 1024) {
-                return _Index(bytes - 1024, 7) + group_array[1] + group_array[0];
+                return _Index(bytes - 1024, 7) + GROUP_ARRAY[1] + GROUP_ARRAY[0];
             }
             else if (bytes <= 64 * 1024) {
-                return _Index(bytes - 8 * 1024, 10) + group_array[2] + group_array[1] + group_array[0];
+                return _Index(bytes - 8 * 1024, 10) + GROUP_ARRAY[2] + GROUP_ARRAY[1] + GROUP_ARRAY[0];
             }
-            else if (bytes <= 256 * 1024) {
-                return _Index(bytes - 64 * 1024, 13) + group_array[3] + group_array[2] + group_array[1] + group_array[0];
+            else  {
+                return _Index(bytes - 64 * 1024, 13) + GROUP_ARRAY[3] + GROUP_ARRAY[2] + GROUP_ARRAY[1] + GROUP_ARRAY[0];
             }
             
-            assert(false);
+            // assert(false);
             return -1;
         }
         
         // 计算申请size大小的对象时，应该向PageCache申请几页
-        static inline size_t NumMovePage(size_t size) {
+        static inline constexpr size_t NumMovePage(size_t size) {
             // 简单策略：size小于8KB申请1页，否则向上取整
             // size_t num = size / (1 << PAGE_SHIFT);  // 除以8KB
             //这个错了，不是向上取整，而是向下取整
@@ -189,11 +191,12 @@ class SizeClass {//内存对齐+索引计算
         }
         // 计算ThreadCache一次从CentralCache获取多少个对象
         // 慢增长策略：小对象多拿，大对象少拿
-        static inline size_t NumMoveSize(size_t size) {
+        static inline constexpr size_t NumMoveSize(size_t size) {
             // 1. 计算：固定字节数/size (MAX_BYTES = 256KB)
             size_t num = MAX_BYTES / size;
             
-            // 2. 限制上限512（避免批量过大，锁竞争严重）
+            // 2. 限制上限512（减少访问CentralCache次数）
+            // 配合ThreadCache阈值1536，拿512×3次才触发释放
             if (num > 512) {
                 num = 512;
             }

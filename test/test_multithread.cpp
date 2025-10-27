@@ -104,11 +104,13 @@ long long BenchmarkMalloc_MultiThread(size_t threadCount, size_t size, size_t ro
 long long BenchmarkMemoryPool_MultiThread(size_t threadCount, size_t size, size_t roundsPerThread) {
     cout << "\n【内存池多线程测试】线程数: " << threadCount << endl;
     
+#ifdef ENABLE_STATS
     // 重置统计数据
     g_allocCount.store(0);
     g_freeCount.store(0);
     g_currentMemory.store(0);
     g_peakMemory.store(0);
+#endif
     
     auto start = std::chrono::high_resolution_clock::now();
     
@@ -127,10 +129,12 @@ long long BenchmarkMemoryPool_MultiThread(size_t threadCount, size_t size, size_
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     
     cout << "内存池耗时: " << duration << " ms" << endl;
+#ifdef ENABLE_STATS
     cout << "分配次数: " << g_allocCount.load() << endl;
     cout << "释放次数: " << g_freeCount.load() << endl;
     cout << "峰值内存: " << g_peakMemory.load() << " 字节 (" 
-         << (double)g_peakMemory.load() / 1024 << " KB)" << endl;
+         << (double)g_peakMemory.load() / 1024 / 1024 << " MB)" << endl;
+#endif
     
     return duration;
 }
@@ -215,10 +219,12 @@ void CompareMultiThreadPerformance_Batch(size_t threadCount, size_t size, size_t
     
     // 测试内存池批量模式
     cout << "\n【内存池批量模式】" << endl;
+#ifdef ENABLE_STATS
     g_allocCount.store(0);
     g_freeCount.store(0);
     g_currentMemory.store(0);
     g_peakMemory.store(0);
+#endif
     
     auto start2 = std::chrono::high_resolution_clock::now();
     vector<thread> threads2;
@@ -232,8 +238,10 @@ void CompareMultiThreadPerformance_Batch(size_t threadCount, size_t size, size_t
     long long mempoolTime = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2).count();
     
     cout << "内存池耗时: " << mempoolTime << " ms" << endl;
+#ifdef ENABLE_STATS
     cout << "峰值内存: " << g_peakMemory.load() << " 字节 (" 
          << (double)g_peakMemory.load() / 1024 / 1024 << " MB)" << endl;
+#endif
     
     // 计算性能提升
     cout << "\n【性能对比】" << endl;
@@ -265,12 +273,13 @@ int main() {
     cout << "========== 高并发内存池多线程性能测试 ==========" << endl;
     cout << "硬件并发数: " << thread::hardware_concurrency() << " 核心" << endl;
     
-    Test_2Threads();
-    Test_4Threads();
-    Test_8Threads();
-    Test_MixedSize();
+    // 注释掉即分即放模式，只保留真实场景批量模式
+    // Test_2Threads();
+    // Test_4Threads();
+    // Test_8Threads();
+    // Test_MixedSize();
     
-    // 【新增】批量模式测试
+    // 【真实场景】批量模式测试
     Test_BatchMode();
     
     cout << "\n========== 所有测试完成 ==========" << endl;
